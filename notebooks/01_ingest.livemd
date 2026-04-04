@@ -2,7 +2,7 @@
 
 ```elixir
 Mix.install([
-  {:req, "~> 0.7"},
+  {:req, "~> 0.5"},
   {:nimble_csv, "~> 1.3"},
   {:kino, "~> 0.19"}
 ])
@@ -14,13 +14,18 @@ Mix.install([
 NimbleCSV.define(UFOParser, separator: ",", escape: "\"")
 
 rows =
-  Path.join(__DIR__, "../rag_poc/data/nuforc_reports.csv")
+  Path.join(__DIR__, "../rag_poc/data/scrubbed.csv")
   |> Path.expand()
   |> File.read!()
-  |> UFOParser.parse_string(skip_headers: false)
+  |> UFOParser.parse_string(skip_headers: true)
   |> Enum.take(2000)
 
-Kino.DataTable.new(rows |> Enum.take(10))
+columns = ~w(datetime city state country shape duration_sec duration_text comments date_posted latitude longitude)
+
+rows
+|> Enum.take(10)
+|> Enum.map(fn row -> Enum.zip(columns, row) |> Map.new() end)
+|> Kino.DataTable.new()
 ```
 
 ## Create Collection
@@ -38,8 +43,8 @@ Req.put!("http://localhost:6333/collections/ufo_sightings",
 points =
   rows
   |> Enum.with_index()
-  |> Enum.map(fn {[date, city, state, shape, duration, text | _], idx} ->
-    content = "Date: #{date}\nLocation: #{city}, #{state}\nShape: #{shape}\nReport: #{text}"
+  |> Enum.map(fn {[datetime, city, state, country, shape, _duration_sec, _duration_text, comments | _], idx} ->
+    content = "Date: #{datetime}\nLocation: #{city}, #{state}, #{country}\nShape: #{shape}\nReport: #{comments}"
 
     %{body: %{"embeddings" => [vector | _]}} =
       Req.post!("http://localhost:11434/api/embeddings",
