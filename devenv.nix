@@ -21,8 +21,8 @@
     docker compose down
   '';
   scripts.pull-models.exec = ''
-    ollama pull llama3.2
-    ollama pull nomic-embed-text
+    docker compose exec ollama ollama pull llama3.2
+    docker compose exec ollama ollama pull nomic-embed-text
   '';
 
   env = {
@@ -30,6 +30,19 @@
     QDRANT_URL = "http://localhost:6333";
     COLLECTION_NAME = "ufo_sightings";
   };
+
+  enterShell = ''
+    export PATH="$HOME/.mix/escripts:$PATH"
+    echo ""
+    echo "-- elixir_rag_poc --"
+    echo "1. infra-up         Start Qdrant + Ollama containers"
+    echo "2. pull-models      Download LLM + embedding model (one-time)"
+    echo "3. livebook server"
+    echo "4. Open notebooks in order: 01 → 02 → 03"
+    echo ""
+    echo "Qdrant dashboard: http://localhost:6333/dashboard"
+    echo ""
+  '';
 
   git-hooks.hooks.mix-format.enable = true;
 }
