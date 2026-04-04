@@ -1,0 +1,144 @@
+# 02 - Exploring vector search
+```elixir
+Mix.install([
+  {:req, "~> 0.7"},
+  {:kino, "~> 0.19"},
+  {:kino_vega_lite, "~> 0.1"}
+])
+
+for file <- ~w(embeddings qdrant) do
+  Path.join(__DIR__, "../rag_poc/lib/rag_poc/#{file}.ex")
+  |> Path.expand()
+  |> Code.require_file()
+end
+```
+
+## Search with a natural language query
+```elixir
+question = "bright lights hovering over the desert"
+
+q_vector = RagPoc.Embeddings.embed(question)
+IO.puts("Vector dimensions: #{length(q_vector)}")
+```
+```elixir
+%{"result" => results} =
+  RagPoc.Qdrant.search("ufo_sightings", q_vector, limit: 10)
+
+results
+|> Enum.map(fn r ->
+  %{
+    score: Float.round(r["score"], 4),
+    text: String.slice(r["payload"]["text"], 0, 200),
+    state: r["payload"]["state"],
+    shape: r["payload"]["shape"]
+  }
+end)
+|> Kino.DataTable.new(name: "Search results")
+```
+
+## Visualise similarity scores
+```elixir
+alias VegaLite, as: Vl
+
+scores =
+  results
+  |> Enum.with_index(1)
+  |> Enum.map(fn {r, i} -> %{rank: i, score: r["score"]} end)
+
+Vl.new(width: 500, height: 200, title: "Similarity scores by rank")
+|> Vl.data_from_values(scores)
+|> Vl.mark(:bar)
+|> Vl.encode_field(:x, "rank", type: :ordinal, title: "Result rank")
+|> Vl.encode_field(:y, "score", type: :quantitative, title: "Cosine similarity", scale: %{domain: [0, 1]})
+```
+
+## Compare k values
+
+How does the quality of the worst result change as you retrieve more?
+```elixir
+k_values = [1, 3, 5, 10, 20]
+
+k_comparison =
+  Enum.map(k_values, fn k ->
+    %{"result" => res} =
+      RagPoc.Qdrant.search("ufo_sightings", q_vector, limit: k)
+
+    %{
+      k: k,
+      top_score: Float.round(hd(res)["score"], 4),
+      worst_score: Float.round(List.last(res)["score"], 4),
+      spread: Float.round(hd(res)["score"] - List.last(res)["score"], 4)
+    }
+  end)
+
+Kino.DataTable.new(k_comparison, name: "k comparison")
+```
+
+## Metadata filtering
+
+Qdrant supports filtering by payload fields. Search only in Arizona:
+```elixir
+%{"result" => az_results} =
+  Req.post!(
+    "http://localhost:6333/collections/ufo_sightings/points/search",
+    json: %{
+      vector: q_vector,
+      limit: 5,
+      with_payload: true,
+      filter: %{
+        must: [%{key: "state", match: %{value: "AZ"}}]
+      }
+    }
+  ).body
+
+az_results
+|> Enum.map(fn r ->
+  %{
+    score: Float.round(r["score"], 4),
+    text: String.slice(r["payload"]["text"], 0, 200)
+  }
+end)
+|> Kino.DataTable.new(name: "Arizona only")
+```
+
+## Negative test - irrelevant query
+
+What happens when you search for something completely unrelated?
+```elixir
+junk_vector = RagPoc.Embeddings.embed("best sourdough bread recipe")
+
+%{"result" => junk_results} =
+  RagPoc.Qdrant.search("ufo_sightings", junk_vector, limit: 5)
+
+junk_scores = Enum.map(junk_results, & &1["score"])
+
+IO.puts("Relevant query top score:   #{Float.round(hd(results)["score"], 4)}")
+IO.puts("Irrelevant query top score: #{Float.round(hd(junk_scores), 4)}")
+IO.puts("")
+IO.puts("Notice the gap - this is how you'd set a score threshold to reject")
+IO.puts("low-confidence results instead of hallucinating an answer.")
+```
+
+## Interactive search
+```elixir
+input = Kino.Input.text("Try your own query:")
+```
+```elixir
+query = Kino.Input.read(input)
+
+unless query == "" do
+  vec = RagPoc.Embeddings.embed(query)
+  %{"result" => res} = RagPoc.Qdrant.search("ufo_sightings", vec, limit: 5)
+
+  res
+  |> Enum.map(fn r ->
+    %{
+      score: Float.round(r["score"], 4),
+      state: r["payload"]["state"],
+      shape: r["payload"]["shape"],
+      report: String.slice(r["payload"]["text"], 0, 300)
+    }
+  end)
+  |> Kino.DataTable.new(name: "Results for: #{query}")
+end
+```

@@ -1,0 +1,61 @@
+# 03 - Ask Questions
+```elixir
+Mix.install([
+  {:langchain, "~> 0.7"},
+  {:req, "~> 0.5"},
+  {:kino, "~> 0.19"}
+])
+```
+
+## Interactive Query
+```elixir
+input = Kino.Input.text("Ask about UFO sightings:")
+```
+```elixir
+question = Kino.Input.read(input)
+
+# Embed the question
+%{body: %{"embeddings" => [q_vector | _]}} =
+  Req.post!("http://localhost:11434/api/embeddings",
+    json: %{model: "nomic-embed-text", prompt: question}
+  )
+
+# Search Qdrant
+%{"result" => results} =
+  Req.post!("http://localhost:6333/collections/ufo_sightings/points/search",
+    json: %{vector: q_vector, limit: 5, with_payload: true}
+  ).body
+
+# Build context
+context =
+  results
+  |> Enum.map(& &1["payload"]["text"])
+  |> Enum.join("\n---\n")
+
+# Ask the LLM via LangChain
+alias LangChain.Chains.LLMChain
+alias LangChain.ChatModels.ChatOllamaAI
+alias LangChain.Message
+
+{:ok, chain} =
+  %{llm: ChatOllamaAI.new!(%{endpoint: "http://localhost:11434", model: "llama3.2"})}
+  |> LLMChain.new!()
+  |> LLMChain.add_messages([
+    Message.new_system!("""
+    Answer using ONLY these UFO sighting reports. Cite specific sightings.
+
+    REPORTS:
+    #{context}
+    """),
+    Message.new_user!(question)
+  ])
+  |> LLMChain.run()
+
+Kino.Markdown.new("""
+**Question:** #{question}
+
+**Answer:** #{chain.last_message.content}
+
+*Based on #{length(results)} retrieved reports (top score: #{hd(results)["score"] |> Float.round(3)})*
+""")
+```

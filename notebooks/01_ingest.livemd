@@ -1,0 +1,66 @@
+# 01 - Ingest UFO Sightings
+
+```elixir
+Mix.install([
+  {:req, "~> 0.7"},
+  {:nimble_csv, "~> 1.3"},
+  {:kino, "~> 0.19"}
+])
+```
+
+## Load CSV
+
+```elixir
+NimbleCSV.define(UFOParser, separator: ",", escape: "\"")
+
+rows =
+  Path.join(__DIR__, "../rag_poc/data/nuforc_reports.csv")
+  |> Path.expand()
+  |> File.read!()
+  |> UFOParser.parse_string(skip_headers: false)
+  |> Enum.take(2000)
+
+Kino.DataTable.new(rows |> Enum.take(10))
+```
+
+## Create Collection
+
+```elixir
+# nomic-embed-text produces 768-dim vectors
+Req.put!("http://localhost:6333/collections/ufo_sightings",
+  json: %{vectors: %{size: 768, distance: "Cosine"}}
+)
+```
+
+## Embed & Upsert
+
+```elixir
+points =
+  rows
+  |> Enum.with_index()
+  |> Enum.map(fn {[date, city, state, shape, duration, text | _], idx} ->
+    content = "Date: #{date}\nLocation: #{city}, #{state}\nShape: #{shape}\nReport: #{text}"
+
+    %{body: %{"embeddings" => [vector | _]}} =
+      Req.post!("http://localhost:11434/api/embeddings",
+        json: %{model: "nomic-embed-text", prompt: content}
+      )
+
+    %{
+      id: idx,
+      vector: vector,
+      payload: %{text: content, state: state, shape: shape}
+    }
+  end)
+
+# Upsert in batches of 100
+points
+|> Enum.chunk_every(100)
+|> Enum.each(fn batch ->
+  Req.put!("http://localhost:6333/collections/ufo_sightings/points",
+    json: %{points: batch}
+  )
+end)
+
+"Ingested #{length(points)} documents"
+```
