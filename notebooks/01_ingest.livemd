@@ -46,7 +46,7 @@ points =
   |> Enum.map(fn {[datetime, city, state, country, shape, _duration_sec, _duration_text, comments | _], idx} ->
     content = "Date: #{datetime}\nLocation: #{city}, #{state}, #{country}\nShape: #{shape}\nReport: #{comments}"
 
-    %{body: %{"embeddings" => [vector | _]}} =
+    %{body: %{"embedding" => vector}} =
       Req.post!("http://localhost:11434/api/embeddings",
         json: %{model: "nomic-embed-text", prompt: content}
       )

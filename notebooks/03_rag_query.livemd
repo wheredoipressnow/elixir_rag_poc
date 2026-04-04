@@ -1,4 +1,5 @@
 # 03 - Ask Questions
+
 ```elixir
 Mix.install([
   {:langchain, "~> 0.7"},
@@ -8,14 +9,16 @@ Mix.install([
 ```
 
 ## Interactive Query
+
 ```elixir
 input = Kino.Input.text("Ask about UFO sightings:")
 ```
+
 ```elixir
 question = Kino.Input.read(input)
 
 # Embed the question
-%{body: %{"embeddings" => [q_vector | _]}} =
+%{body: %{"embedding" => q_vector}} =
   Req.post!("http://localhost:11434/api/embeddings",
     json: %{model: "nomic-embed-text", prompt: question}
   )
@@ -38,7 +41,7 @@ alias LangChain.ChatModels.ChatOllamaAI
 alias LangChain.Message
 
 {:ok, chain} =
-  %{llm: ChatOllamaAI.new!(%{endpoint: "http://localhost:11434", model: "llama3.2"})}
+  %{llm: ChatOllamaAI.new!(%{endpoint: "http://localhost:11434/api/chat", model: "llama3.2"})}
   |> LLMChain.new!()
   |> LLMChain.add_messages([
     Message.new_system!("""
@@ -54,7 +57,10 @@ alias LangChain.Message
 Kino.Markdown.new("""
 **Question:** #{question}
 
-**Answer:** #{chain.last_message.content}
+**Answer:** #{Enum.map_join(List.wrap(chain.last_message.content), fn
+  %{content: text} -> text
+  text when is_binary(text) -> text
+end)}
 
 *Based on #{length(results)} retrieved reports (top score: #{hd(results)["score"] |> Float.round(3)})*
 """)

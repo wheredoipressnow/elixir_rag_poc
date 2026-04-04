@@ -2,7 +2,7 @@ defmodule RagPoc.Embeddings do
   @ollama System.get_env("OLLAMA_HOST", "http://localhost:11434")
 
   def embed(text) when is_binary(text) do
-    %{body: %{"embeddings" => [vector | _]}} =
+    %{body: %{"embedding" => vector}} =
       Req.post!("#{@ollama}/api/embeddings",
         json: %{model: "nomic-embed-text", prompt: text}
       )
