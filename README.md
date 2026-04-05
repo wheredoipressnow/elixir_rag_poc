@@ -1,7 +1,7 @@
 # elixir_rag_poc
 
 A local RAG proof of concept for querying public datasets using natural language.
-Built with Elixir, Livebook, Qdrant, and Ollama.
+Using Elixir, Livebook, Qdrant, and Ollama.
 
 ## Goal
 
