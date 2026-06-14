@@ -6,13 +6,17 @@
   ...
 }:
 
+let
+  pkgs-unstable = import inputs.nixpkgs-unstable { system = pkgs.stdenv.system; };
+in
 {
   packages = [
     pkgs.livebook
+    inputs.expert.packages.${pkgs.system}.default
   ];
 
   languages.elixir.enable = true;
-  languages.elixir.package = pkgs.beam27Packages.elixir_1_19;
+  languages.elixir.package = pkgs-unstable.beam29Packages.elixir_1_20;
 
   scripts.infra-up.exec = ''
     docker compose up -d
