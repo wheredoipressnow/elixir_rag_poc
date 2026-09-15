@@ -19,8 +19,8 @@ defmodule RagPoc.MixProject do
 
   defp deps do
     [
-      {:langchain, "~> 0.7"},
-      {:req, "~> 0.5"},
+      {:langchain, "~> 0.14"},
+      {:req, "~> 0.7"},
       {:nimble_csv, "~> 1.3"}
     ]
   end
